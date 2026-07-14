@@ -1,0 +1,5 @@
+server/gemini_key.txt
+output/
+**/__pycache__/
+web/.wrangler/
+*.log

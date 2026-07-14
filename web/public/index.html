@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>레퍼런스 생성기 — 레퍼런스를 김대영(YLZ) 콘텐츠로</title>
+<meta name="description" content="레퍼런스 캡션·대사를 붙여넣으면 김대영(YLZ) 톤의 훅 3안·대본·캡션·해시태그로 재창작합니다.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="레퍼런스 생성기 — 김대영(YLZ) 콘텐츠 변환기">
+<meta property="og:description" content="레퍼런스를 붙여넣으면 김대영 톤의 훅·대본·캡션으로 재창작.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+<style>
+:root { --blue:#3B4EFF; --bg:#070a18; --card:#101425; --card2:#161c33; --line:rgba(59,78,255,.35);
+  --tx:#eef0ff; --sub:#b9c1e8; --mut:#8f9bff; }
+* { box-sizing:border-box; margin:0; padding:0; }
+html { -webkit-text-size-adjust:100%; }
+body { background:var(--bg); color:var(--tx); font-family:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
+  line-height:1.7; padding:28px 18px 60px; }
+main { max-width:720px; margin:0 auto; }
+h1,h2,h3 { line-height:1.35; }
+button { font-family:inherit; cursor:pointer; }
+a { color:var(--mut); }
+@keyframes rise { from {opacity:0; transform:translateY(18px);} to {opacity:1; transform:none;} }
+@keyframes pulse { 0%,100% {transform:scale(1);} 50% {transform:scale(1.12);} }
+
+.hero { text-align:center; padding:14px 0 22px; animation:rise .7s ease both; }
+.hero .orb { font-size:3rem; }
+.hero h1 { font-size:1.9rem; margin:.3rem 0 .5rem; }
+.hero p { color:#9aa3c7; max-width:34rem; margin:0 auto; font-size:.95rem; }
+.hero b { color:var(--mut); }
+
+form { animation:rise .7s ease .1s both; }
+fieldset { border:1px solid var(--line); border-radius:16px; padding:20px; margin:14px 0; background:var(--card); }
+legend { padding:0 10px; font-size:.85rem; font-weight:700; color:var(--mut); letter-spacing:.05em; }
+label { display:block; font-size:.82rem; color:var(--sub); margin:12px 0 5px; font-weight:600; }
+label:first-of-type { margin-top:2px; }
+.hint { font-size:.74rem; color:#7f88b0; font-weight:400; margin-top:3px; }
+input,select,textarea { width:100%; background:#0b0f22; color:var(--tx); border:1px solid rgba(143,155,255,.25);
+  border-radius:10px; padding:11px 13px; font-size:.95rem; font-family:inherit; }
+input:focus,select:focus,textarea:focus { outline:2px solid var(--blue); border-color:transparent; }
+textarea { resize:vertical; min-height:90px; }
+.modes { display:flex; gap:8px; margin-top:4px; }
+.modes label { flex:1; margin:0; text-align:center; padding:10px; border:1px solid rgba(143,155,255,.25);
+  border-radius:10px; cursor:pointer; font-size:.9rem; color:var(--sub); background:#0b0f22; transition:.15s; }
+.modes input { display:none; }
+.modes input:checked + span { color:#fff; }
+.modes label:has(input:checked) { border-color:var(--blue); background:rgba(59,78,255,.18); }
+.btn { display:block; width:100%; border:none; border-radius:12px; padding:15px; font-size:1.05rem; font-weight:800; margin-top:16px; }
+.btn-primary { background:var(--blue); color:#fff; }
+.btn-primary:hover { filter:brightness(1.12); }
+.btn-primary:disabled { opacity:.5; cursor:default; }
+.err { color:#ff9d9d; font-size:.9rem; margin-top:12px; text-align:center; min-height:1.4em; }
+
+.loading { text-align:center; padding:70px 20px; animation:rise .4s ease both; }
+.loading .orb { font-size:3.4rem; display:inline-block; animation:pulse 1.6s ease infinite; }
+.loading .msg { margin-top:16px; font-size:1.05rem; font-weight:700; }
+.loading .sub { color:#9aa3c7; font-size:.85rem; margin-top:6px; }
+
+/* 결과 */
+.result { animation:rise .6s ease both; }
+.badge { display:inline-block; background:rgba(59,78,255,.18); border:1px solid var(--line); color:var(--mut);
+  font-size:.8rem; font-weight:700; padding:5px 12px; border-radius:99px; }
+.gist { color:#9aa3c7; font-size:.9rem; margin:12px 0 4px; }
+.block { border:1px solid var(--line); border-radius:16px; padding:18px 18px 20px; margin:14px 0; background:var(--card); }
+.block h3 { font-size:1rem; color:var(--mut); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.hook { background:var(--card2); border-radius:11px; padding:12px 14px; margin:9px 0; }
+.hook .t { font-size:.72rem; color:var(--mut); font-weight:700; margin-bottom:4px; }
+.hook .x { font-size:1.02rem; font-weight:600; }
+.seg { display:grid; grid-template-columns:74px 1fr; gap:12px; padding:10px 0; border-top:1px solid rgba(143,155,255,.13); }
+.seg:first-of-type { border-top:none; }
+.seg .tm { font-size:.72rem; color:var(--mut); font-weight:700; padding-top:2px; }
+.seg .rl { font-size:.72rem; color:#7f88b0; display:block; margin-bottom:3px; }
+.cap { white-space:pre-wrap; font-size:.95rem; line-height:1.75; }
+.tags { color:var(--mut); font-weight:600; margin-top:14px; font-size:.95rem; }
+.copy { float:right; background:transparent; border:1px solid rgba(143,155,255,.3); color:var(--sub);
+  font-size:.74rem; font-weight:600; padding:4px 10px; border-radius:8px; }
+.copy:hover { border-color:var(--blue); color:#fff; }
+.copy.done { border-color:#37d67a; color:#37d67a; }
+.again { background:transparent; color:var(--sub); border:1px solid rgba(143,155,255,.3);
+  font-weight:600; font-size:.9rem; border-radius:12px; padding:13px; width:100%; margin-top:8px; }
+.foot { text-align:center; color:#5c6488; font-size:.76rem; margin-top:30px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="app"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const app = $("app");
+
+const FORM = `
+  <div class="hero">
+    <div class="orb">🎬</div>
+    <h1>레퍼런스 생성기</h1>
+    <p>레퍼런스의 <b>캡션·대사</b>를 붙여넣으면, <b>김대영(YLZ)</b> 톤의 훅 3안·대본·캡션·해시태그로 재창작합니다.</p>
+  </div>
+  <form id="f">
+    <fieldset>
+      <legend>레퍼런스 붙여넣기</legend>
+      <label>캡션 <span class="hint">(레퍼런스 글. 없으면 비워도 됨)</span></label>
+      <textarea id="caption" placeholder="레퍼런스 게시물의 캡션을 붙여넣으세요"></textarea>
+      <label>대사 / 스크립트 <span class="hint">(영상 속 말. 해외 영상이면 원문 그대로 OK — 자동 번역·변환됨)</span></label>
+      <textarea id="transcript" placeholder="영상 대사를 붙여넣으세요. (링크만 있고 대사가 없다면, /레퍼런스 스킬이나 STT로 먼저 추출)"></textarea>
+      <label>추가 지시 <span class="hint">(선택 — 예: "판매형 캡션으로", "20초 랭킹형으로")</span></label>
+      <input id="note" placeholder="원하는 방향이 있으면 적어주세요">
+    </fieldset>
+    <fieldset>
+      <legend>톤 모드</legend>
+      <div class="modes">
+        <label><input type="radio" name="mode" value="auto" checked><span>자동 판정</span></label>
+        <label><input type="radio" name="mode" value="김대영"><span>김대영(비즈)</span></label>
+        <label><input type="radio" name="mode" value="김디오"><span>김디오(엔터)</span></label>
+      </div>
+    </fieldset>
+    <button class="btn btn-primary" id="go" type="submit">김대영 식으로 변환</button>
+    <div class="err" id="err"></div>
+  </form>
+  <div class="foot">YLZ MEDIA · 레퍼런스 소재만 차용, 표현은 전부 김대영 톤으로 재창작합니다.</div>
+`;
+
+const LOADING = `
+  <div class="loading">
+    <div class="orb">🎬</div>
+    <div class="msg" id="lmsg">레퍼런스를 해부하는 중…</div>
+    <div class="sub">훅·구조·관통 메시지를 뽑아 김대영 톤으로 다시 씁니다</div>
+  </div>
+`;
+
+const LMSGS = ["레퍼런스를 해부하는 중…", "훅 유형을 고르는 중…", "김대영 톤으로 대본을 쓰는 중…", "캡션·해시태그를 다듬는 중…"];
+
+function esc(s){ return (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function copyBtn(text, label){
+  const id = "c"+Math.random().toString(36).slice(2,8);
+  window.__cp = window.__cp || {};
+  window.__cp[id] = text;
+  return `<button class="copy" onclick="doCopy('${id}',this)">${label||"복사"}</button>`;
+}
+window.doCopy = (id, el) => {
+  navigator.clipboard.writeText(window.__cp[id] || "").then(()=>{
+    el.textContent = "복사됨 ✓"; el.classList.add("done");
+    setTimeout(()=>{ el.textContent="복사"; el.classList.remove("done"); }, 1500);
+  });
+};
+
+function renderResult(res){
+  const hooks = (res.hooks||[]).map(h =>
+    `<div class="hook"><div class="t">${esc(h.type)}</div><div class="x">${esc(h.text)}</div></div>`).join("");
+  const script = (res.script||[]).map(s =>
+    `<div class="seg"><div class="tm">${esc(s.time)}</div><div><span class="rl">${esc(s.role)}</span>${esc(s.text)}</div></div>`).join("");
+  const scriptPlain = (res.script||[]).map(s => `[${s.time}] ${s.role}\n${s.text}`).join("\n\n");
+  const tags = (res.hashtags||[]).map(esc).join("  ");
+
+  app.innerHTML = `
+  <div class="result">
+    <div class="hero" style="padding-bottom:6px">
+      <span class="badge">${esc(res.mode||"김대영")} 모드</span>
+      <p class="gist">차용한 관통 메시지 · ${esc(res.source_gist||"")}</p>
+    </div>
+    <div class="block"><h3>🎣 훅 3안</h3>${hooks}</div>
+    <div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>
+    <div class="block"><h3>✍️ 캡션 ${copyBtn(res.caption||"","캡션 복사")}</h3><div class="cap">${esc(res.caption)}</div>
+      <div class="tags">${tags} ${copyBtn(tags,"태그 복사")}</div></div>
+    <button class="again" onclick="reset()">← 새 레퍼런스로 다시</button>
+    <div class="foot">마음에 안 드는 부분은 '추가 지시'에 방향을 적고 다시 돌려보세요.</div>
+  </div>`;
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function reset(){ app.innerHTML = FORM; bind(); }
+window.reset = reset;
+
+function bind(){
+  const f = $("f");
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      caption: $("caption").value,
+      transcript: $("transcript").value,
+      note: $("note").value,
+      mode: (f.querySelector('input[name=mode]:checked')||{}).value || "auto",
+    };
+    if (((payload.caption||"")+(payload.transcript||"")).trim().length < 10){
+      $("err").textContent = "캡션이나 대사를 붙여넣어 주세요."; return;
+    }
+    app.innerHTML = LOADING;
+    let i=0; const iv=setInterval(()=>{ const m=$("lmsg"); if(m) m.textContent=LMSGS[++i%LMSGS.length]; }, 1800);
+    try{
+      const r = await fetch("/api/generate", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) });
+      const data = await r.json();
+      clearInterval(iv);
+      if(!r.ok || data.error){ reset(); $("err").textContent = data.error || "생성에 실패했어요. 다시 시도해주세요."; return; }
+      renderResult(data.result);
+    }catch(err){ clearInterval(iv); reset(); $("err").textContent = "네트워크 오류. 다시 시도해주세요."; }
+  });
+}
+
+reset();
+</script>
+</body>
+</html>

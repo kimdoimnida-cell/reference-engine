@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>레퍼런스 생성기 — 링크만 넣으면 끝</title>
+<style>
+:root { --blue:#3B4EFF; --bg:#070a18; --card:#101425; --card2:#161c33; --line:rgba(59,78,255,.35);
+  --tx:#eef0ff; --sub:#b9c1e8; --mut:#8f9bff; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--tx); font-family:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  line-height:1.7; padding:28px 18px 60px; }
+main { max-width:720px; margin:0 auto; }
+@keyframes rise { from {opacity:0; transform:translateY(18px);} to {opacity:1; transform:none;} }
+@keyframes pulse { 0%,100% {transform:scale(1);} 50% {transform:scale(1.12);} }
+.hero { text-align:center; padding:14px 0 20px; animation:rise .6s ease both; }
+.hero .orb { font-size:3rem; }
+.hero h1 { font-size:1.9rem; margin:.3rem 0 .5rem; }
+.hero p { color:#9aa3c7; max-width:34rem; margin:0 auto; font-size:.95rem; }
+.hero b { color:var(--mut); }
+.flow { font-size:.78rem; color:#7f88b0; margin-top:10px; }
+form { animation:rise .6s ease .1s both; }
+fieldset { border:1px solid var(--line); border-radius:16px; padding:20px; margin:14px 0; background:var(--card); }
+legend { padding:0 10px; font-size:.85rem; font-weight:700; color:var(--mut); }
+label { display:block; font-size:.82rem; color:var(--sub); margin:12px 0 5px; font-weight:600; }
+label:first-of-type{margin-top:2px;}
+input { width:100%; background:#0b0f22; color:var(--tx); border:1px solid rgba(143,155,255,.25);
+  border-radius:10px; padding:13px; font-size:.98rem; font-family:inherit; }
+input:focus { outline:2px solid var(--blue); border-color:transparent; }
+.hint{font-size:.74rem;color:#7f88b0;font-weight:400;margin-top:3px;}
+.modes { display:flex; gap:8px; margin-top:4px; }
+.modes label { flex:1; margin:0; text-align:center; padding:10px; border:1px solid rgba(143,155,255,.25);
+  border-radius:10px; cursor:pointer; font-size:.9rem; color:var(--sub); background:#0b0f22; }
+.modes input { display:none; }
+.modes label:has(input:checked) { border-color:var(--blue); background:rgba(59,78,255,.18); color:#fff; }
+.btn { display:block; width:100%; border:none; border-radius:12px; padding:16px; font-size:1.05rem; font-weight:800; margin-top:16px; background:var(--blue); color:#fff; cursor:pointer; }
+.btn:hover { filter:brightness(1.12); }
+.err { color:#ff9d9d; font-size:.9rem; margin-top:12px; text-align:center; min-height:1.4em; }
+.loading { text-align:center; padding:60px 20px; animation:rise .4s ease both; }
+.loading .orb { font-size:3.4rem; display:inline-block; animation:pulse 1.6s ease infinite; }
+.loading .msg { margin-top:16px; font-size:1.05rem; font-weight:700; }
+.loading .sub { color:#9aa3c7; font-size:.85rem; margin-top:6px; }
+.result { animation:rise .5s ease both; }
+.badge { display:inline-block; background:rgba(59,78,255,.18); border:1px solid var(--line); color:var(--mut);
+  font-size:.8rem; font-weight:700; padding:5px 12px; border-radius:99px; }
+.gist { color:#9aa3c7; font-size:.9rem; margin:12px 0 4px; }
+.block { border:1px solid var(--line); border-radius:16px; padding:18px; margin:14px 0; background:var(--card); }
+.block h3 { font-size:1rem; color:var(--mut); margin-bottom:12px; }
+details.src { border:1px dashed rgba(143,155,255,.3); border-radius:12px; padding:12px 16px; margin:14px 0; background:transparent; }
+details.src summary { cursor:pointer; color:var(--sub); font-size:.85rem; font-weight:600; }
+details.src .pair { margin-top:10px; font-size:.86rem; color:#c9d0f5; }
+details.src .k { color:var(--mut); font-weight:700; font-size:.78rem; margin-top:8px; }
+.raw { white-space:pre-wrap; color:#98a0c8; font-size:.82rem; }
+.hook { background:var(--card2); border-radius:11px; padding:12px 14px; margin:9px 0; }
+.hook .t { font-size:.72rem; color:var(--mut); font-weight:700; margin-bottom:4px; }
+.hook .x { font-size:1.02rem; font-weight:600; }
+.seg { display:grid; grid-template-columns:74px 1fr; gap:12px; padding:10px 0; border-top:1px solid rgba(143,155,255,.13); }
+.seg:first-of-type{border-top:none;}
+.seg .tm { font-size:.72rem; color:var(--mut); font-weight:700; padding-top:2px; }
+.seg .rl { font-size:.72rem; color:#7f88b0; display:block; margin-bottom:3px; }
+.cap { white-space:pre-wrap; font-size:.95rem; line-height:1.75; }
+.tags { color:var(--mut); font-weight:600; margin-top:14px; }
+.copy { float:right; background:transparent; border:1px solid rgba(143,155,255,.3); color:var(--sub);
+  font-size:.74rem; font-weight:600; padding:4px 10px; border-radius:8px; cursor:pointer; }
+.copy.done { border-color:#37d67a; color:#37d67a; }
+.again { background:transparent; color:var(--sub); border:1px solid rgba(143,155,255,.3);
+  font-weight:600; font-size:.9rem; border-radius:12px; padding:13px; width:100%; margin-top:8px; cursor:pointer; }
+.foot { text-align:center; color:#5c6488; font-size:.76rem; margin-top:26px; }
+</style>
+</head>
+<body>
+<main><div id="app"></div></main>
+<script>
+const $=(id)=>document.getElementById(id); const app=$("app");
+function esc(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+window.__cp={};
+function copyBtn(t,l){const id="c"+Math.random().toString(36).slice(2,8);window.__cp[id]=t;
+  return `<button class="copy" onclick="doCopy('${id}',this)">${l||"복사"}</button>`;}
+window.doCopy=(id,el)=>{navigator.clipboard.writeText(window.__cp[id]||"").then(()=>{
+  el.textContent="복사됨 ✓";el.classList.add("done");setTimeout(()=>{el.textContent="복사";el.classList.remove("done");},1500);});};
+
+const FORM=`
+  <div class="hero">
+    <div class="orb">🎬</div>
+    <h1>레퍼런스 생성기</h1>
+    <p><b>링크만</b> 넣으면 캡션·음성 자동 추출 → 한국어 번역 → <b>김대영(YLZ)</b> 콘텐츠로 변환합니다.</p>
+    <div class="flow">인스타/유튜브/틱톡 링크 · 인스타 막히면 작성자 유튜브에서 동일 콘텐츠 자동 검색</div>
+  </div>
+  <form id="f">
+    <fieldset>
+      <legend>레퍼런스 링크</legend>
+      <label>URL</label>
+      <input id="url" placeholder="https://www.instagram.com/reel/..." autocomplete="off">
+      <label>추가 지시 <span class="hint">(선택 — 예: "판매형 캡션으로", "20초 랭킹형")</span></label>
+      <input id="note" placeholder="원하는 방향이 있으면">
+    </fieldset>
+    <fieldset>
+      <legend>톤 모드</legend>
+      <div class="modes">
+        <label><input type="radio" name="mode" value="auto" checked>자동 판정</label>
+        <label><input type="radio" name="mode" value="김대영">김대영(비즈)</label>
+        <label><input type="radio" name="mode" value="김디오">김디오(엔터)</label>
+      </div>
+    </fieldset>
+    <button class="btn" type="submit">링크 넣고 변환</button>
+    <div class="err" id="err"></div>
+  </form>
+  <div class="foot">YLZ MEDIA · 로컬 실행 · 음성 전사는 영상 길이에 따라 20~60초 걸릴 수 있어요.</div>`;
+
+const LMSGS=["영상 받아오는 중…","음성을 텍스트로 전사하는 중… (조금 걸려요)","한국어로 번역하는 중…","김대영 톤으로 재창작하는 중…"];
+function loadingHTML(){return `<div class="loading"><div class="orb">🎬</div>
+  <div class="msg" id="lmsg">영상 받아오는 중…</div>
+  <div class="sub">링크 하나로 추출→번역→변환까지 진행합니다</div></div>`;}
+
+function renderResult(r){
+  const s=r._source||{};
+  const hooks=(r.hooks||[]).map(h=>`<div class="hook"><div class="t">${esc(h.type)}</div><div class="x">${esc(h.text)}</div></div>`).join("");
+  const script=(r.script||[]).map(x=>`<div class="seg"><div class="tm">${esc(x.time)}</div><div><span class="rl">${esc(x.role)}</span>${esc(x.text)}</div></div>`).join("");
+  const scriptPlain=(r.script||[]).map(x=>`[${x.time}] ${x.role}\n${x.text}`).join("\n\n");
+  const tags=(r.hashtags||[]).map(esc).join("  ");
+  app.innerHTML=`<div class="result">
+    <div class="hero" style="padding-bottom:6px">
+      <span class="badge">${esc(r.mode||"김대영")} 모드</span>
+      <p class="gist">차용한 관통 메시지 · ${esc(r.source_gist||"")}</p>
+    </div>
+    <details class="src"><summary>📥 원본 추출 · 번역 보기 (${esc(s.platform||"")} · ${esc(s.uploader||"")})</summary>
+      <div class="pair">
+        <div class="k">원본 캡션</div><div class="raw">${esc(s.caption_raw||"(없음)")}</div>
+        <div class="k">원본 대사(전사)</div><div class="raw">${esc(s.script_raw||"(없음)")}</div>
+        <div class="k">캡션 번역</div><div>${esc(r.translated_caption||"")}</div>
+        <div class="k">대사 번역</div><div>${esc(r.translated_script||"")}</div>
+      </div>
+    </details>
+    <div class="block"><h3>🎣 훅 3안</h3>${hooks}</div>
+    <div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>
+    <div class="block"><h3>✍️ 캡션 ${copyBtn(r.caption||"","캡션 복사")}</h3><div class="cap">${esc(r.caption)}</div>
+      <div class="tags">${tags} ${copyBtn(tags,"태그 복사")}</div></div>
+    <button class="again" onclick="reset()">← 새 링크로 다시</button>
+  </div>`;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function reset(){app.innerHTML=FORM;bind();} window.reset=reset;
+function bind(){
+  $("f").addEventListener("submit",async(e)=>{
+    e.preventDefault();
+    const url=$("url").value.trim();
+    if(!/^https?:\/\//.test(url)){$("err").textContent="링크(URL)를 넣어주세요.";return;}
+    const payload={url,note:$("note").value,mode:(document.querySelector('input[name=mode]:checked')||{}).value||"auto"};
+    app.innerHTML=loadingHTML();
+    let i=0;const iv=setInterval(()=>{const m=$("lmsg");if(m)m.textContent=LMSGS[++i%LMSGS.length];},2600);
+    try{
+      const res=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+      const data=await res.json();clearInterval(iv);
+      if(!res.ok||data.error){reset();$("err").textContent=data.error||"실패했어요.";return;}
+      renderResult(data.result);
+    }catch(err){clearInterval(iv);reset();$("err").textContent="서버 오류. 다시 시도해주세요.";}
+  });
+}
+reset();
+</script>
+</body>
+</html>

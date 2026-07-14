@@ -1,0 +1,6 @@
+web/
+output/
+server/gemini_key.txt
+**/__pycache__/
+.wrangler/
+*.bat
