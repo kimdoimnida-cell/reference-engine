@@ -20,7 +20,9 @@ import base64
 import tempfile
 import traceback
 from pathlib import Path
+import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from flask import Flask, request, jsonify, Response
 
@@ -155,9 +157,23 @@ def gemini_pipeline(audio_path, caption_raw, note, mode):
         },
     }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
-    req = Request(url, data=json.dumps(payload).encode("utf-8"), headers={"content-type": "application/json"})
-    with urlopen(req, timeout=180) as r:
-        out = json.loads(r.read().decode("utf-8"))
+    data = json.dumps(payload).encode("utf-8")
+    # Gemini가 가끔 503/429(과부하)를 뱉음 → 지수 백오프로 자동 재시도
+    last_err = None
+    for attempt in range(4):
+        try:
+            req = Request(url, data=data, headers={"content-type": "application/json"})
+            with urlopen(req, timeout=180) as r:
+                out = json.loads(r.read().decode("utf-8"))
+            break
+        except HTTPError as e:
+            last_err = e
+            if e.code in (429, 500, 503) and attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+    else:
+        raise last_err
     parts = out["candidates"][0]["content"]["parts"]
     text = "".join(p.get("text", "") for p in parts)
     return json.loads(text)
