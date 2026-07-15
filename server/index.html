@@ -4,21 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>레퍼런스 생성기 — 링크만 넣으면 끝</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root { --blue:#3B4EFF; --bg:#070a18; --card:#101425; --card2:#161c33; --line:rgba(59,78,255,.35);
   --tx:#eef0ff; --sub:#b9c1e8; --mut:#8f9bff; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg); color:var(--tx); font-family:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-  line-height:1.7; padding:28px 18px 60px; }
+  line-height:1.7; padding:22px 18px 60px; }
 main { max-width:720px; margin:0 auto; }
 @keyframes rise { from {opacity:0; transform:translateY(18px);} to {opacity:1; transform:none;} }
 @keyframes pulse { 0%,100% {transform:scale(1);} 50% {transform:scale(1.12);} }
-.hero { text-align:center; padding:14px 0 20px; animation:rise .6s ease both; }
-.hero .orb { font-size:3rem; }
-.hero h1 { font-size:1.9rem; margin:.3rem 0 .5rem; }
-.hero p { color:#9aa3c7; max-width:34rem; margin:0 auto; font-size:.95rem; }
+.nav { display:flex; gap:8px; justify-content:center; margin-bottom:6px; }
+.nav button { background:transparent; border:1px solid rgba(143,155,255,.25); color:var(--sub);
+  border-radius:99px; padding:7px 18px; font-size:.85rem; font-weight:700; cursor:pointer; font-family:inherit; }
+.nav button.on { background:rgba(59,78,255,.18); border-color:var(--blue); color:#fff; }
+.hero { text-align:center; padding:10px 0 18px; animation:rise .6s ease both; }
+.hero .orb { font-size:2.8rem; }
+.hero h1 { font-size:1.8rem; margin:.3rem 0 .5rem; }
+.hero p { color:#9aa3c7; max-width:34rem; margin:0 auto; font-size:.93rem; }
 .hero b { color:var(--mut); }
-.flow { font-size:.78rem; color:#7f88b0; margin-top:10px; }
+.flow { font-size:.76rem; color:#7f88b0; margin-top:8px; }
 form { animation:rise .6s ease .1s both; }
 fieldset { border:1px solid var(--line); border-radius:16px; padding:20px; margin:14px 0; background:var(--card); }
 legend { padding:0 10px; font-size:.85rem; font-weight:700; color:var(--mut); }
@@ -66,25 +71,54 @@ details.src .k { color:var(--mut); font-weight:700; font-size:.78rem; margin-top
 .again { background:transparent; color:var(--sub); border:1px solid rgba(143,155,255,.3);
   font-weight:600; font-size:.9rem; border-radius:12px; padding:13px; width:100%; margin-top:8px; cursor:pointer; }
 .foot { text-align:center; color:#5c6488; font-size:.76rem; margin-top:26px; }
+/* 저장 박스 */
+.savebox { border:1px solid var(--blue); border-radius:16px; padding:16px 18px; margin:14px 0; background:rgba(59,78,255,.08); }
+.savebox h3 { font-size:.95rem; color:var(--mut); margin-bottom:8px; }
+.savebox .row { display:flex; gap:8px; }
+.savebox input { flex:1; }
+.savebox button { border:none; border-radius:10px; padding:0 18px; font-weight:800; background:var(--blue); color:#fff; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.savebox button.done { background:#37d67a; }
+.savebox button:disabled { opacity:.5; }
+/* 라이브러리 */
+.libcat { margin:18px 0 8px; font-size:.82rem; font-weight:800; color:var(--mut); letter-spacing:.03em; }
+.libcard { border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin:8px 0; background:var(--card); cursor:pointer; position:relative; }
+.libcard:hover { border-color:var(--blue); }
+.libcard .meta { font-size:.72rem; color:#7f88b0; margin-bottom:4px; }
+.libcard .g { font-size:.93rem; font-weight:600; color:var(--tx); }
+.libcard .h { font-size:.82rem; color:#9aa3c7; margin-top:5px; }
+.libcard .del { position:absolute; top:10px; right:12px; background:transparent; border:none; color:#6b7399; font-size:1rem; cursor:pointer; }
+.libcard .del:hover { color:#ff9d9d; }
+.empty { text-align:center; color:#7f88b0; padding:50px 20px; }
 </style>
 </head>
 <body>
-<main><div id="app"></div></main>
+<main>
+  <div class="nav"><button id="nav-gen" class="on" onclick="go('form')">✏️ 생성</button><button id="nav-lib" onclick="go('library')">📚 라이브러리</button></div>
+  <div id="app"></div>
+</main>
 <script>
+const SUPA_URL="https://nhhjojqyvpbutxwyeezr.supabase.co";
+const SUPA_KEY="sb_publishable_1DXbSXvTBridLjyvn5AwRw_L5N1yU60";
+const sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
 const $=(id)=>document.getElementById(id); const app=$("app");
 function esc(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-window.__cp={};
+window.__cp={}; window.__last=null; window.__savedIds={};
 function copyBtn(t,l){const id="c"+Math.random().toString(36).slice(2,8);window.__cp[id]=t;
   return `<button class="copy" onclick="doCopy('${id}',this)">${l||"복사"}</button>`;}
 window.doCopy=(id,el)=>{navigator.clipboard.writeText(window.__cp[id]||"").then(()=>{
   el.textContent="복사됨 ✓";el.classList.add("done");setTimeout(()=>{el.textContent="복사";el.classList.remove("done");},1500);});};
+
+function setNav(v){ $("nav-gen").classList.toggle("on", v!=="library"); $("nav-lib").classList.toggle("on", v==="library"); }
+function go(v){ setNav(v); if(v==="library") renderLibrary(); else reset(); }
+window.go=go;
 
 const FORM=`
   <div class="hero">
     <div class="orb">🎬</div>
     <h1>레퍼런스 생성기</h1>
     <p><b>링크만</b> 넣으면 캡션·음성 자동 추출 → 한국어 번역 → <b>김대영(YLZ)</b> 콘텐츠로 변환합니다.</p>
-    <div class="flow">인스타/유튜브/틱톡 링크 · 인스타 막히면 작성자 유튜브에서 동일 콘텐츠 자동 검색</div>
+    <div class="flow">인스타/유튜브/틱톡 링크 · 결과는 라이브러리에 카테고리별 저장</div>
   </div>
   <form id="f">
     <fieldset>
@@ -105,24 +139,36 @@ const FORM=`
     <button class="btn" type="submit">링크 넣고 변환</button>
     <div class="err" id="err"></div>
   </form>
-  <div class="foot">YLZ MEDIA · 로컬 실행 · 음성 전사는 영상 길이에 따라 20~60초 걸릴 수 있어요.</div>`;
+  <div class="foot">YLZ MEDIA · 첫 요청은 서버 깨우느라 최대 50초 걸릴 수 있어요.</div>`;
 
-const LMSGS=["영상 받아오는 중…","음성을 텍스트로 전사하는 중… (조금 걸려요)","한국어로 번역하는 중…","김대영 톤으로 재창작하는 중…"];
+const LMSGS=["영상 받아오는 중…","음성을 텍스트로 전사하는 중…","한국어로 번역하는 중…","김대영 톤으로 재창작하는 중…"];
 function loadingHTML(){return `<div class="loading"><div class="orb">🎬</div>
   <div class="msg" id="lmsg">영상 받아오는 중…</div>
-  <div class="sub">링크 하나로 추출→번역→변환까지 진행합니다</div></div>`;}
+  <div class="sub">링크 하나로 추출→번역→변환까지 진행합니다 (서버가 자고 있었다면 조금 더)</div></div>`;}
 
-function renderResult(r){
+function resultHTML(r, opts){
+  opts=opts||{};
   const s=r._source||{};
   const hooks=(r.hooks||[]).map(h=>`<div class="hook"><div class="t">${esc(h.type)}</div><div class="x">${esc(h.text)}</div></div>`).join("");
   const script=(r.script||[]).map(x=>`<div class="seg"><div class="tm">${esc(x.time)}</div><div><span class="rl">${esc(x.role)}</span>${esc(x.text)}</div></div>`).join("");
   const scriptPlain=(r.script||[]).map(x=>`[${x.time}] ${x.role}\n${x.text}`).join("\n\n");
   const tags=(r.hashtags||[]).map(esc).join("  ");
-  app.innerHTML=`<div class="result">
+  const saveBox = opts.saved ? "" : `
+    <div class="savebox">
+      <h3>📚 라이브러리에 저장</h3>
+      <div class="row">
+        <input id="cat" list="cats" placeholder="카테고리 (예: 조회수, 브랜딩, 수익화)" value="${esc(opts.defaultCat||'')}">
+        <button id="savebtn" onclick="saveCurrent()">저장</button>
+      </div>
+      <datalist id="cats"></datalist>
+    </div>`;
+  return `<div class="result">
     <div class="hero" style="padding-bottom:6px">
       <span class="badge">${esc(r.mode||"김대영")} 모드</span>
+      ${opts.saved?`<span class="badge" style="margin-left:6px">📚 ${esc(opts.saved)}</span>`:""}
       <p class="gist">차용한 관통 메시지 · ${esc(r.source_gist||"")}</p>
     </div>
+    ${saveBox}
     <details class="src"><summary>📥 원본 추출 · 번역 보기 (${esc(s.platform||"")} · ${esc(s.uploader||"")})</summary>
       <div class="pair">
         <div class="k">원본 캡션</div><div class="raw">${esc(s.caption_raw||"(없음)")}</div>
@@ -135,11 +181,81 @@ function renderResult(r){
     <div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>
     <div class="block"><h3>✍️ 캡션 ${copyBtn(r.caption||"","캡션 복사")}</h3><div class="cap">${esc(r.caption)}</div>
       <div class="tags">${tags} ${copyBtn(tags,"태그 복사")}</div></div>
-    <button class="again" onclick="reset()">← 새 링크로 다시</button>
+    <button class="again" onclick="go('form')">← 새 링크로 다시</button>
   </div>`;
+}
+
+function renderResult(r){
+  window.__last=r;
+  app.innerHTML=resultHTML(r,{});
+  fillCats();
   window.scrollTo({top:0,behavior:"smooth"});
 }
-function reset(){app.innerHTML=FORM;bind();} window.reset=reset;
+
+async function fillCats(){
+  try{
+    const {data}=await sb.from("board").select("data").like("id","refeng\\_%");
+    const cats=[...new Set((data||[]).map(x=>x.data&&x.data.category).filter(Boolean))];
+    const dl=$("cats"); if(dl) dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join("");
+  }catch(e){}
+}
+
+window.saveCurrent=async function(){
+  const r=window.__last; if(!r) return;
+  const cat=($("cat").value||"미분류").trim();
+  const btn=$("savebtn"); btn.disabled=true; btn.textContent="저장 중…";
+  const id="refeng_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+  const s=r._source||{};
+  const rec={ category:cat, url:s.url||"", platform:s.platform||"", uploader:s.uploader||"",
+    mode:r.mode||"", source_gist:r.source_gist||"", hook0:(r.hooks&&r.hooks[0]&&r.hooks[0].text)||"",
+    result:r, created_at:new Date().toISOString() };
+  try{
+    const {error}=await sb.from("board").upsert({id, data:rec});
+    if(error) throw error;
+    btn.textContent="저장됨 ✓"; btn.classList.add("done");
+  }catch(e){ btn.disabled=false; btn.textContent="저장"; alert("저장 실패: "+(e.message||e)); }
+};
+
+async function renderLibrary(){
+  setNav("library");
+  app.innerHTML=`<div class="hero" style="padding:14px 0"><div class="orb">📚</div><h1>라이브러리</h1><p>저장한 레퍼런스 · 카테고리별</p></div><div class="empty">불러오는 중…</div>`;
+  let items=[];
+  try{
+    const {data,error}=await sb.from("board").select("id,data").like("id","refeng\\_%");
+    if(error) throw error;
+    items=(data||[]).map(x=>({id:x.id,...(x.data||{})})).sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
+  }catch(e){ app.innerHTML=`<div class="empty">불러오기 실패: ${esc(e.message||''+e)}</div>`; return; }
+  if(!items.length){ app.innerHTML=`<div class="hero" style="padding:14px 0"><div class="orb">📚</div><h1>라이브러리</h1></div><div class="empty">아직 저장된 게 없어요.<br>생성 후 '저장'을 누르면 여기 쌓입니다.</div>`; return; }
+  const byCat={}; items.forEach(it=>{ (byCat[it.category||"미분류"] ||= []).push(it); });
+  window.__lib={}; items.forEach(it=>window.__lib[it.id]=it);
+  let html=`<div class="hero" style="padding:14px 0 6px"><div class="orb">📚</div><h1>라이브러리</h1><p>${items.length}개 저장됨</p></div>`;
+  Object.keys(byCat).sort().forEach(cat=>{
+    html+=`<div class="libcat">${esc(cat)} · ${byCat[cat].length}</div>`;
+    byCat[cat].forEach(it=>{
+      const d=(it.created_at||"").slice(0,10);
+      html+=`<div class="libcard" onclick="openSaved('${it.id}')">
+        <button class="del" onclick="event.stopPropagation();delSaved('${it.id}')">🗑</button>
+        <div class="meta">${esc(it.platform||"")} · ${esc(it.uploader||"")} · ${esc(it.mode||"")} · ${d}</div>
+        <div class="g">${esc(it.source_gist||"(제목 없음)")}</div>
+        <div class="h">${esc(it.hook0||"")}</div>
+      </div>`;
+    });
+  });
+  app.innerHTML=html;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+window.renderLibrary=renderLibrary;
+window.openSaved=function(id){ const it=window.__lib[id]; if(!it||!it.result) return;
+  setNav(""); app.innerHTML=resultHTML(it.result,{saved:it.category});
+  const back=document.querySelector('.again'); if(back){ back.textContent="← 라이브러리로"; back.setAttribute("onclick","go('library')"); }
+  window.scrollTo({top:0,behavior:"smooth"});
+};
+window.delSaved=async function(id){ if(!confirm("삭제할까요?")) return;
+  try{ await sb.from("board").delete().eq("id",id); renderLibrary(); }catch(e){ alert("삭제 실패"); }
+};
+
+function reset(){ setNav("form"); app.innerHTML=FORM; bind(); }
+window.reset=reset;
 function bind(){
   $("f").addEventListener("submit",async(e)=>{
     e.preventDefault();
@@ -152,6 +268,7 @@ function bind(){
       const res=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
       const data=await res.json();clearInterval(iv);
       if(!res.ok||data.error){reset();$("err").textContent=data.error||"실패했어요.";return;}
+      if(data.result._source) data.result._source.url=url;
       renderResult(data.result);
     }catch(err){clearInterval(iv);reset();$("err").textContent="서버 오류. 다시 시도해주세요.";}
   });
