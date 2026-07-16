@@ -89,6 +89,22 @@ details.src .k { color:var(--mut); font-weight:700; font-size:.78rem; margin-top
 .libcard .del { position:absolute; top:10px; right:12px; background:transparent; border:none; color:#6b7399; font-size:1rem; cursor:pointer; }
 .libcard .del:hover { color:#ff9d9d; }
 .empty { text-align:center; color:#7f88b0; padding:50px 20px; }
+/* 전략 분석 */
+.stratbox { border:1px solid #c9a94a; border-radius:16px; padding:16px 18px; margin:14px 0; background:rgba(201,169,74,.06); }
+.stratbox h3 { font-size:.98rem; color:#e2c877; margin-bottom:10px; }
+.stratbox input { margin-bottom:8px; }
+.stratbox .go { width:100%; background:#c9a94a; color:#1a1400; border:none; border-radius:10px; padding:13px; font-weight:800; cursor:pointer; font-family:inherit; }
+.stratbox .go:disabled { opacity:.5; }
+.sfield { margin:14px 0; padding-top:12px; border-top:1px solid rgba(201,169,74,.18); }
+.sfield:first-of-type { border-top:none; padding-top:0; }
+.sfield .lab { font-size:.74rem; color:#e2c877; font-weight:800; margin-bottom:4px; letter-spacing:.02em; }
+.sfield .val { font-size:.9rem; color:#e8ead6; }
+.pill { display:inline-block; font-size:.72rem; font-weight:800; padding:3px 11px; border-radius:99px; background:rgba(201,169,74,.18); color:#e2c877; margin:0 6px 4px 0; }
+.prod { border:1px solid rgba(201,169,74,.25); border-radius:8px; padding:8px 11px; margin:6px 0; font-size:.86rem; }
+.prod b { color:#e2c877; }
+.take { padding:5px 0 5px 18px; position:relative; font-size:.9rem; }
+.take:before { content:"→"; position:absolute; left:0; color:#c9a94a; font-weight:800; }
+.slim { color:#9a9375; font-size:.78rem; margin-top:10px; font-style:italic; }
 </style>
 </head>
 <body>
@@ -181,6 +197,12 @@ function resultHTML(r, opts){
     <div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>
     <div class="block"><h3>✍️ 캡션 ${copyBtn(r.caption||"","캡션 복사")}</h3><div class="cap">${esc(r.caption)}</div>
       <div class="tags">${tags} ${copyBtn(tags,"태그 복사")}</div></div>
+    <div class="stratbox">
+      <h3>🕵️ 전략 분석 (퍼널 해부)</h3>
+      <input id="profileurl" placeholder="프로필/링크인바이오 URL (선택 — 넣으면 상품·가격·업셀까지 크롤 분석)">
+      <button class="go" id="stratbtn" onclick="runStrategy()">이 사람 전략 분석하기</button>
+      <div id="strout"></div>
+    </div>
     <button class="again" onclick="go('form')">← 새 링크로 다시</button>
   </div>`;
 }
@@ -216,6 +238,47 @@ window.saveCurrent=async function(){
   }catch(e){ btn.disabled=false; btn.textContent="저장"; alert("저장 실패: "+(e.message||e)); }
 };
 
+window.runStrategy=async function(){
+  const r=window.__last; if(!r) return;
+  const s=r._source||{};
+  const payload={ caption:s.caption_raw||r.translated_caption||"", transcript:s.script_raw||r.translated_script||"", profile_url:($("profileurl").value||"").trim() };
+  const btn=$("stratbtn"); btn.disabled=true; btn.textContent="분석 중… (프로필 크롤 시 20~40초)";
+  $("strout").innerHTML="";
+  try{
+    const res=await fetch("/api/strategy",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const data=await res.json();
+    if(!res.ok||data.error){ btn.disabled=false; btn.textContent="이 사람 전략 분석하기"; $("strout").innerHTML=`<div class="slim">실패: ${esc(data.error||'')}</div>`; return; }
+    renderStrategy(data.result); btn.textContent="✓ 분석 완료 (다시 누르면 재분석)"; btn.disabled=false;
+  }catch(e){ btn.disabled=false; btn.textContent="이 사람 전략 분석하기"; $("strout").innerHTML=`<div class="slim">서버 오류</div>`; }
+};
+function renderStrategy(st){
+  const lm=st.lead_magnet||{}, tk=st.ticket||{}, pf=st.profile_funnel||{};
+  const takes=(st.benchmark_takeaway||[]).map(t=>`<div class="take">${esc(t)}</div>`).join("");
+  let pfHtml;
+  if(pf.available){
+    const prods=(pf.products||[]).map(p=>`<div class="prod"><b>${esc(p.name)}</b> · <span class="pill">${esc(p.price_tier)}</span> ${esc(p.note)}</div>`).join("")||`<div class="val">상품 정보 미확인</div>`;
+    pfHtml=`<div class="sfield"><div class="lab">🔗 프로필 퍼널 (크롤됨)</div>
+      <div class="val" style="margin-bottom:6px">${esc(pf.linkinbio_structure)}</div>
+      ${prods}
+      <div class="val" style="margin-top:8px">📧 이메일 수집: ${esc(pf.email_capture)}</div>
+      <div class="val">🪜 업셀: ${esc(pf.upsell_path)}</div></div>`;
+  } else {
+    pfHtml=`<div class="sfield"><div class="lab">🔗 프로필 퍼널</div><div class="slim">프로필/링크인바이오 URL을 넣으면 실제 상품·가격·업셀까지 크롤해서 분석해요.</div></div>`;
+  }
+  $("strout").innerHTML=`
+    <div class="sfield"><span class="pill">${esc(st.funnel_stage)}</span><span class="pill">${esc(st.cta_mechanism)}</span><span class="pill">티켓: ${esc(tk.low_or_high)}</span></div>
+    <div class="sfield"><div class="lab">🎯 CTA — 뭘 시키나</div><div class="val">${esc(st.cta_detail)}</div></div>
+    <div class="sfield"><div class="lab">🧲 리드마그넷 (미끼)</div>
+      <div class="val"><b style="color:#e2c877">준다는 것:</b> ${esc(lm.promised)}</div>
+      <div class="val"><b style="color:#e2c877">안에 든 것(추정):</b> ${esc(lm.likely_contents)}</div>
+      <div class="val"><b style="color:#e2c877">왜 이 미끼:</b> ${esc(lm.why)}</div></div>
+    <div class="sfield"><div class="lab">💰 로우티켓 vs 하이티켓</div><div class="val">${esc(tk.evidence)}</div></div>
+    ${pfHtml}
+    <div class="sfield"><div class="lab">🗺️ 전체 퍼널 (미끼→저가→고가)</div><div class="val">${esc(st.full_funnel_map)}</div></div>
+    <div class="sfield"><div class="lab">🔥 김대영이 훔친다면</div>${takes}</div>
+    <div class="slim">⚠️ ${esc(st.limits)}</div>`;
+}
+
 async function renderLibrary(){
   setNav("library");
   app.innerHTML=`<div class="hero" style="padding:14px 0"><div class="orb">📚</div><h1>라이브러리</h1><p>저장한 레퍼런스 · 카테고리별</p></div><div class="empty">불러오는 중…</div>`;
@@ -246,6 +309,7 @@ async function renderLibrary(){
 }
 window.renderLibrary=renderLibrary;
 window.openSaved=function(id){ const it=window.__lib[id]; if(!it||!it.result) return;
+  window.__last=it.result;
   setNav(""); app.innerHTML=resultHTML(it.result,{saved:it.category});
   const back=document.querySelector('.again'); if(back){ back.textContent="← 라이브러리로"; back.setAttribute("onclick","go('library')"); }
   window.scrollTo({top:0,behavior:"smooth"});

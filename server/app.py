@@ -178,6 +178,154 @@ def gemini_pipeline(audio_path, caption_raw, note, mode):
     text = "".join(p.get("text", "") for p in parts)
     return json.loads(text)
 
+# ─────────────────── 전략 분석 (퍼널 해부) ───────────────────
+
+_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+_TAG = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.I | re.S)
+_HREF = re.compile(r'href=["\'](https?://[^"\'>\s]+)["\']', re.I)
+_STRIP = re.compile(r"<[^>]+>")
+_SALES_KW = re.compile(r"course|checkout|buy|pay|price|pricing|cart|shop|store|product|coaching|consult|program|enroll|join|book|calendar|cal\.com|calendly|stan\.store|gumroad|kajabi|teachable|udemy|smartstore|payhip|lemonsqueeze|class101|krw|won|\$|원", re.I)
+
+
+def _fetch_text(url, limit=4000):
+    try:
+        req = Request(url, headers={"User-Agent": _UA})
+        with urlopen(req, timeout=12) as r:
+            html = r.read(600000).decode("utf-8", "ignore")
+    except Exception as e:
+        return "", [], f"(가져오기 실패: {str(e)[:40]})"
+    links = list(dict.fromkeys(_HREF.findall(html)))
+    body = _STRIP.sub(" ", _TAG.sub(" ", html))
+    body = re.sub(r"\s+", " ", body).strip()
+    return body[:limit], links, ""
+
+
+def fetch_funnel(profile_url):
+    """프로필/링크인바이오 URL → 본문 + 유망한 아웃바운드 링크(판매/가격) 몇 개 크롤해 텍스트로."""
+    main_text, links, err = _fetch_text(profile_url, 4000)
+    parts = [f"[메인 페이지: {profile_url}]\n{main_text or err}"]
+    # 판매·가격 신호가 있는 아웃바운드 링크 우선 최대 3개
+    picks, seen_dom = [], set()
+    for L in links:
+        dom = re.sub(r"^https?://([^/]+).*", r"\1", L)
+        if any(x in dom for x in ("instagram.com", "facebook.", "tiktok.", "youtube.", "cdn", "fonts.", "gstatic", "google")):
+            continue
+        if _SALES_KW.search(L) or dom not in seen_dom:
+            picks.append(L); seen_dom.add(dom)
+        if len(picks) >= 3:
+            break
+    for L in picks:
+        t, _, e = _fetch_text(L, 2500)
+        parts.append(f"[연결 페이지: {L}]\n{t or e}")
+    return "\n\n".join(parts)[:8000]
+
+
+STRATEGY_SYSTEM = """당신은 SNS 퍼널·수익화 전략 분석가다. 레퍼런스 크리에이터의 콘텐츠(캡션+대사)와, 있다면 프로필/링크인바이오/랜딩 페이지 크롤 텍스트를 받아
+'이 사람이 이 콘텐츠로 무엇을 어떻게 파는가'를 해부해 JSON으로 출력한다.
+
+원칙:
+- 근거 우선. 입력에서 확인되는 건 단정, 추정은 '추정'이라 명시. 없는 수치·가격 창작 금지.
+- 실용적으로. 두루뭉술한 말 금지. 김대영(YLZ)이 바로 벤치마킹할 수 있게.
+- 모든 텍스트 한국어.
+
+분석 항목:
+1. funnel_stage: 이 콘텐츠의 목적 (인지 / 리드수집 / 세일즈 중 택1 + 한 줄 근거)
+2. cta_mechanism: 무엇을 시키는가 (댓글 리드마그넷 / DM / 프로필 링크 / 팔로우·저장 등) + cta_detail로 정확히 뭐라고 했는지
+3. lead_magnet: 미끼 자료 분석 — promised(뭘 준다 했나), likely_contents(그 안에 뭐가 들었을지 추정), why(왜 이걸 미끼로)
+4. ticket: 로우티켓 vs 하이티켓 신호 — low_or_high(저가/고가/복합/불명), evidence(근거)
+5. profile_funnel: 프로필/링크인바이오 크롤 텍스트가 있으면 채운다. 없으면 available=false. linkinbio_structure(링크 구성·순서), products(이름·가격대tier·메모 배열), email_capture(이메일 수집 여부·방식), upsell_path(업셀 경로)
+6. full_funnel_map: 미끼→저가→고가로 어떻게 태우는지 한 문단(추정 포함, 표시)
+7. benchmark_takeaway: 김대영/YLZ가 이걸 훔친다면 구체 액션 3개(배열)
+8. limits: 자동으로 확인 못 한 부분(예: 댓글-DM 자동응답 미끼 실물, JS로 가려진 가격 등) 한 줄"""
+
+STRATEGY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "funnel_stage": {"type": "STRING"},
+        "cta_mechanism": {"type": "STRING"},
+        "cta_detail": {"type": "STRING"},
+        "lead_magnet": {"type": "OBJECT", "properties": {
+            "promised": {"type": "STRING"}, "likely_contents": {"type": "STRING"}, "why": {"type": "STRING"}},
+            "required": ["promised", "likely_contents", "why"]},
+        "ticket": {"type": "OBJECT", "properties": {
+            "low_or_high": {"type": "STRING"}, "evidence": {"type": "STRING"}},
+            "required": ["low_or_high", "evidence"]},
+        "profile_funnel": {"type": "OBJECT", "properties": {
+            "available": {"type": "BOOLEAN"},
+            "linkinbio_structure": {"type": "STRING"},
+            "products": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+                "name": {"type": "STRING"}, "price_tier": {"type": "STRING"}, "note": {"type": "STRING"}},
+                "required": ["name", "price_tier", "note"]}},
+            "email_capture": {"type": "STRING"}, "upsell_path": {"type": "STRING"}},
+            "required": ["available", "linkinbio_structure", "products", "email_capture", "upsell_path"]},
+        "full_funnel_map": {"type": "STRING"},
+        "benchmark_takeaway": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "limits": {"type": "STRING"},
+    },
+    "required": ["funnel_stage", "cta_mechanism", "cta_detail", "lead_magnet", "ticket",
+                 "profile_funnel", "full_funnel_map", "benchmark_takeaway", "limits"],
+}
+
+
+def gemini_json(system, user, schema, max_tokens=8000):
+    payload = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": user}]}],
+        "generationConfig": {"responseMimeType": "application/json", "responseSchema": schema,
+                             "maxOutputTokens": max_tokens, "temperature": 0.7, "thinkingConfig": {"thinkingBudget": 2048}},
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
+    data = json.dumps(payload).encode("utf-8")
+    last = None
+    for attempt in range(4):
+        try:
+            with urlopen(Request(url, data=data, headers={"content-type": "application/json"}), timeout=180) as r:
+                out = json.loads(r.read().decode("utf-8"))
+            break
+        except HTTPError as e:
+            last = e
+            if e.code in (429, 500, 503) and attempt < 3:
+                time.sleep(2 * (attempt + 1)); continue
+            raise
+    else:
+        raise last
+    parts = out["candidates"][0]["content"]["parts"]
+    return json.loads("".join(p.get("text", "") for p in parts))
+
+
+@app.post("/api/strategy")
+def strategy():
+    if not GEMINI_KEY:
+        return jsonify({"error": "서버에 AI 키가 설정되지 않았어요."}), 503
+    body = request.get_json(force=True, silent=True) or {}
+    caption = (body.get("caption") or "").strip()
+    transcript = (body.get("transcript") or "").strip()
+    profile_url = (body.get("profile_url") or "").strip()
+    if not (caption or transcript):
+        return jsonify({"error": "분석할 콘텐츠(캡션·대사)가 없어요."}), 400
+    funnel_text = ""
+    if re.match(r"^https?://", profile_url):
+        funnel_text = fetch_funnel(profile_url)
+    user = f"""[레퍼런스 콘텐츠]
+## 캡션
+{caption or '(없음)'}
+
+## 대사(전사)
+{transcript or '(없음)'}
+
+## 프로필/링크인바이오/랜딩 크롤 텍스트
+{funnel_text or '(프로필 URL 미제공 — profile_funnel.available=false 로)'}
+
+위를 근거로 이 크리에이터의 퍼널·수익화 전략을 해부해 JSON으로 출력하라."""
+    try:
+        result = gemini_json(STRATEGY_SYSTEM, user, STRATEGY_SCHEMA)
+        result["_funnel_crawled"] = bool(funnel_text)
+        return jsonify({"result": result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"전략 분석 오류: {e}"}), 500
+
+
 # ─────────────────────────── 라우트 ───────────────────────────
 
 @app.post("/api/run")
