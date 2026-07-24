@@ -178,6 +178,127 @@ def gemini_pipeline(audio_path, caption_raw, note, mode):
     text = "".join(p.get("text", "") for p in parts)
     return json.loads(text)
 
+# ─────────────────── ②-B 카드뉴스 (슬라이드 이미지 → OCR+번역+재창작) ───────────────────
+
+CARD_SYSTEM_PROMPT = f"""당신은 김대영(YLZ MEDIA)의 콘텐츠 재창작 엔진이다.
+입력으로 레퍼런스 '카드뉴스'의 슬라이드 이미지들을 순서대로(1번부터) 받는다. 다음을 순서대로 수행해 JSON으로 출력한다.
+
+1) OCR: 각 슬라이드 이미지에서 보이는 텍스트를 순서대로 정확히 읽는다. 슬라이드마다 큰 제목(headline)과 본문(body)을 구분한다. 이미지 순서 = 카드 번호(n, 1부터). 워터마크·계정핸들·페이지표시(1/8 등)는 무시한다. → slides_ocr
+2) 번역: 원문이 한국어가 아니면 자연스러운 한국어로 맥락 번역(직역 금지, 뉘앙스 유지). 한국어면 정리. 전체 흐름을 한 문단으로 요약. → translated
+3) 재창작: 레퍼런스의 소재·구조(카드 수·전개 순서·기승전결)만 차용하고 표현·훅·문장은 전부 아래 Style Bible의 김대영/김디오 톤으로 새로 쓴다. 원문 번역 복붙 금지.
+   → mode, source_gist, hooks(정확히 3개, 표지 카드에 쓸 훅. 각 type은 훅 5유형 중 택1 한국어 표기), cards(카드별: n, role[표지/본문/전환/CTA 등], headline[한 줄], body[슬라이드에 들어갈 2~4줄]), caption(피드 캡션·줄바꿈 포함), hashtags(2~5개)
+
+카드 개수는 원본과 비슷하게(±1) 유지한다. 1번은 표지(스크롤 멈추는 훅), 마지막은 보통 CTA·저장유도.
+모드 판정: 비즈·브랜딩·SNS수익화·AI·정보성이면 '김대영'(기본), 상황극·글로벌엔터·감성·제품광고면 '김디오'. 사용자가 지정하면 따른다.
+모든 출력 텍스트는 한국어.
+
+아래 Style Bible을 반드시 지킨다.
+
+{STYLE_BIBLE}"""
+
+CARD_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "slides_ocr": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+            "n": {"type": "INTEGER"}, "headline": {"type": "STRING"}, "body": {"type": "STRING"}},
+            "required": ["n", "headline", "body"]}},
+        "translated": {"type": "STRING"},
+        "mode": {"type": "STRING", "enum": ["김대영", "김디오"]},
+        "source_gist": {"type": "STRING"},
+        "hooks": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+            "type": {"type": "STRING"}, "text": {"type": "STRING"}}, "required": ["type", "text"]}},
+        "cards": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
+            "n": {"type": "INTEGER"}, "role": {"type": "STRING"},
+            "headline": {"type": "STRING"}, "body": {"type": "STRING"}},
+            "required": ["n", "role", "headline", "body"]}},
+        "caption": {"type": "STRING"},
+        "hashtags": {"type": "ARRAY", "items": {"type": "STRING"}},
+    },
+    "required": ["slides_ocr", "translated", "mode", "source_gist", "hooks", "cards", "caption", "hashtags"],
+}
+
+
+def gemini_cards(images, note, mode):
+    """images: [{'mime': 'image/jpeg', 'b64': '...'}] — 슬라이드 순서대로."""
+    mode_line = (f"[모드 지정] '{mode}' 모드로 작성하라." if mode and mode != "auto" else "[모드] 자동 판정.")
+    user_text = f"""[레퍼런스 카드뉴스 — 슬라이드 {len(images)}장]
+첨부된 이미지를 올린 순서대로(1번부터) 읽어라.
+
+## 추가 지시
+{note or '(없음)'}
+{mode_line}
+
+각 슬라이드 텍스트를 OCR·번역한 뒤, 위 지시와 Style Bible에 따라 김대영(YLZ) 카드뉴스로 재창작해 JSON으로 출력하라."""
+
+    parts = [{"inline_data": {"mime_type": im["mime"], "data": im["b64"]}} for im in images]
+    parts.append({"text": user_text})
+    payload = {
+        "systemInstruction": {"parts": [{"text": CARD_SYSTEM_PROMPT}]},
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": CARD_SCHEMA,
+            "maxOutputTokens": 16000,
+            "temperature": 0.9,
+            "thinkingConfig": {"thinkingBudget": 2048},
+        },
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_KEY}"
+    data = json.dumps(payload).encode("utf-8")
+    last_err = None
+    for attempt in range(4):
+        try:
+            req = Request(url, data=data, headers={"content-type": "application/json"})
+            with urlopen(req, timeout=180) as r:
+                out = json.loads(r.read().decode("utf-8"))
+            break
+        except HTTPError as e:
+            last_err = e
+            if e.code in (429, 500, 503) and attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+    else:
+        raise last_err
+    parts_out = out["candidates"][0]["content"]["parts"]
+    return json.loads("".join(p.get("text", "") for p in parts_out))
+
+
+# 카드뉴스 URL 자동 다운로드 (gallery-dl) — 다운로드본은 downloads/<shortcode>/ 에 보관
+IMG_EXT = (".jpg", ".jpeg", ".png", ".webp")
+COOKIES_FILE = BASE / "ig_cookies.txt"          # 있으면 파일 쿠키 사용
+COOKIES_BROWSER = os.environ.get("IG_COOKIES_BROWSER", "chrome")  # 없으면 브라우저 쿠키
+
+
+def _shortcode(url):
+    m = re.search(r"/(?:p|reel|tv)/([A-Za-z0-9_-]+)", url)
+    return m.group(1) if m else re.sub(r"[^A-Za-z0-9]+", "", url)[-12:] or "post"
+
+
+def _mime_of(path):
+    e = path.suffix.lower()
+    return {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(e.lstrip("."), "image/jpeg")
+
+
+def download_carousel(url):
+    """인스타 캐러셀 URL → 슬라이드 이미지들을 downloads/<shortcode>/ 로 받아 경로 리스트(순서대로) 반환."""
+    import subprocess, sys
+    outdir = ROOT / "downloads" / _shortcode(url)
+    outdir.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, "-m", "gallery_dl", "-d", str(outdir), "--no-mtime", "-o", "directory=[]"]
+    if COOKIES_FILE.exists():
+        cmd += ["--cookies", str(COOKIES_FILE)]
+    elif COOKIES_BROWSER:
+        cmd += ["--cookies-from-browser", COOKIES_BROWSER]
+    cmd.append(url)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=150)
+    imgs = sorted([p for p in outdir.glob("*") if p.suffix.lower() in IMG_EXT], key=lambda p: p.name)
+    if not imgs:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        hint = detail[-1] if detail else "이미지 없음"
+        raise RuntimeError(f"다운로드 실패({hint[:120]}) — 로그인 쿠키(ig_cookies.txt)가 필요하거나 비공개 게시물일 수 있어요.")
+    return imgs, str(outdir)
+
 # ─────────────────── 전략 분석 (퍼널 해부) ───────────────────
 
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
@@ -365,6 +486,70 @@ def run():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"처리 중 오류: {e}", "steps": steps}), 500
+
+
+@app.post("/api/cards")
+def cards():
+    if not GEMINI_KEY:
+        return jsonify({"error": "서버에 AI 키가 설정되지 않았어요."}), 503
+    body = request.get_json(force=True, silent=True) or {}
+    raw_images = body.get("images") or []
+    url = (body.get("url") or "").strip()
+    mode = body.get("mode") or "auto"
+    note = body.get("note") or ""
+    steps = []
+    saved_dir = ""
+    imgs = []
+
+    if raw_images:
+        # 직접 업로드: dataURL 또는 순수 base64 모두 허용, 순서 유지, 최대 20장
+        for it in raw_images[:20]:
+            d = (it.get("data") if isinstance(it, dict) else it) or ""
+            m = (it.get("mime") if isinstance(it, dict) else "") or "image/jpeg"
+            if d.startswith("data:"):
+                head, _, b64 = d.partition(",")
+                mm = re.match(r"data:([^;]+)", head)
+                if mm:
+                    m = mm.group(1)
+                d = b64
+            if d:
+                imgs.append({"mime": m, "b64": d})
+        steps.append(f"업로드 슬라이드 {len(imgs)}장 수신")
+    elif re.match(r"^https?://", url):
+        # URL 자동 다운로드 (gallery-dl → downloads/<shortcode>/)
+        try:
+            paths, saved_dir = download_carousel(url)
+            for p in paths[:20]:
+                imgs.append({"mime": _mime_of(p), "b64": base64.b64encode(p.read_bytes()).decode()})
+            steps.append(f"URL에서 슬라이드 {len(imgs)}장 다운로드 → {saved_dir}")
+        except Exception as e:
+            return jsonify({"error": str(e)}), 502
+    else:
+        return jsonify({"error": "카드뉴스 URL을 넣거나 슬라이드 이미지를 올려주세요."}), 400
+
+    if not imgs:
+        return jsonify({"error": "이미지를 읽지 못했어요."}), 400
+    try:
+        result = gemini_cards(imgs, note, mode)
+        ocr = result.get("slides_ocr", []) or []
+        ocr_head = "\n".join(f"{s.get('n','')}. {s.get('headline','')}" for s in ocr)
+        ocr_body = "\n\n".join(f"[{s.get('n','')}] {s.get('body','')}" for s in ocr)
+        steps.append(f"슬라이드 {len(imgs)}장 OCR·번역·재창작 완료")
+        result["_type"] = "cards"
+        result["_source"] = {
+            "platform": "카드뉴스",
+            "uploader": (note[:24] if note else f"슬라이드 {len(imgs)}장"),
+            "url": url,
+            "saved_dir": saved_dir,
+            "twin_url": "",
+            "caption_raw": ocr_head,
+            "script_raw": ocr_body,
+            "steps": steps,
+        }
+        return jsonify({"result": result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"카드뉴스 처리 오류: {e}"}), 500
 
 
 @app.get("/health")

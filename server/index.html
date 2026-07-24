@@ -105,6 +105,15 @@ details.src .k { color:var(--mut); font-weight:700; font-size:.78rem; margin-top
 .take { padding:5px 0 5px 18px; position:relative; font-size:.9rem; }
 .take:before { content:"→"; position:absolute; left:0; color:#c9a94a; font-weight:800; }
 .slim { color:#9a9375; font-size:.78rem; margin-top:10px; font-style:italic; }
+/* 카드뉴스 */
+.cardprev { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.cardprev .thumb { position:relative; width:56px; height:56px; border-radius:8px; overflow:hidden; border:1px solid var(--line); }
+.cardprev .thumb img { width:100%; height:100%; object-fit:cover; }
+.cardprev .thumb .idx { position:absolute; top:0; left:0; background:var(--blue); color:#fff; font-size:.62rem; font-weight:800; padding:1px 5px; border-bottom-right-radius:6px; }
+.cardslide { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:10px 0; background:var(--card2); }
+.cardslide .cn { font-size:.7rem; font-weight:800; color:var(--mut); letter-spacing:.04em; margin-bottom:6px; }
+.cardslide .chd { font-size:1.05rem; font-weight:800; line-height:1.4; margin-bottom:6px; }
+.cardslide .cbd { font-size:.92rem; color:var(--sub); white-space:pre-wrap; line-height:1.7; }
 </style>
 </head>
 <body>
@@ -138,11 +147,28 @@ const FORM=`
   </div>
   <form id="f">
     <fieldset>
+      <legend>레퍼런스 종류</legend>
+      <div class="modes">
+        <label><input type="radio" name="srctype" value="reel" checked onchange="switchSrc('reel')">🎬 영상·릴스</label>
+        <label><input type="radio" name="srctype" value="cards" onchange="switchSrc('cards')">🖼️ 카드뉴스</label>
+      </div>
+    </fieldset>
+    <fieldset id="reel-fs">
       <legend>레퍼런스 링크</legend>
       <label>URL</label>
       <input id="url" placeholder="https://www.instagram.com/reel/..." autocomplete="off">
       <label>추가 지시 <span class="hint">(선택 — 예: "판매형 캡션으로", "20초 랭킹형")</span></label>
       <input id="note" placeholder="원하는 방향이 있으면">
+    </fieldset>
+    <fieldset id="cards-fs" style="display:none">
+      <legend>카드뉴스 슬라이드</legend>
+      <label>인스타 URL <span class="hint">(자동 다운로드 — 로컬에서 로그인 쿠키 있을 때)</span></label>
+      <input id="cardurl" placeholder="https://www.instagram.com/p/..." autocomplete="off">
+      <label>또는 슬라이드 직접 업로드 <span class="hint">(가장 확실 · 순서대로 여러 장)</span></label>
+      <input id="cardfiles" type="file" accept="image/*" multiple onchange="previewCards(this.files)">
+      <div id="cardprev" class="cardprev"></div>
+      <label>추가 지시 <span class="hint">(선택 — 예: "8장으로", "저장 유도 강하게")</span></label>
+      <input id="note2" placeholder="원하는 방향이 있으면">
     </fieldset>
     <fieldset>
       <legend>톤 모드</legend>
@@ -152,22 +178,59 @@ const FORM=`
         <label><input type="radio" name="mode" value="김디오">김디오(엔터)</label>
       </div>
     </fieldset>
-    <button class="btn" type="submit">링크 넣고 변환</button>
+    <button class="btn" type="submit" id="submitbtn">링크 넣고 변환</button>
     <div class="err" id="err"></div>
   </form>
   <div class="foot">YLZ MEDIA · 첫 요청은 서버 깨우느라 최대 50초 걸릴 수 있어요.</div>`;
 
 const LMSGS=["영상 받아오는 중…","음성을 텍스트로 전사하는 중…","한국어로 번역하는 중…","김대영 톤으로 재창작하는 중…"];
-function loadingHTML(){return `<div class="loading"><div class="orb">🎬</div>
-  <div class="msg" id="lmsg">영상 받아오는 중…</div>
-  <div class="sub">링크 하나로 추출→번역→변환까지 진행합니다 (서버가 자고 있었다면 조금 더)</div></div>`;}
+const LMSGS_CARDS=["슬라이드 받아오는 중…","이미지에서 텍스트 추출(OCR)…","한국어로 번역하는 중…","김대영 카드뉴스로 재창작하는 중…"];
+function loadingHTML(kind){const isC=kind==="cards";return `<div class="loading"><div class="orb">${isC?"🖼️":"🎬"}</div>
+  <div class="msg" id="lmsg">${isC?"슬라이드 읽는 중…":"영상 받아오는 중…"}</div>
+  <div class="sub">${isC?"슬라이드별로 1·2·3 텍스트를 뽑아 재창작합니다":"링크 하나로 추출→번역→변환까지 진행합니다"} (서버가 자고 있었다면 조금 더)</div></div>`;}
+
+// 소스 타입 전환 (영상 ↔ 카드뉴스)
+window.__cardData=[];
+window.switchSrc=function(t){
+  const isC=t==="cards";
+  $("reel-fs").style.display=isC?"none":"";
+  $("cards-fs").style.display=isC?"":"none";
+  $("submitbtn").textContent=isC?"슬라이드 넣고 변환":"링크 넣고 변환";
+};
+window.previewCards=function(files){
+  const arr=[...files];
+  readFiles(arr).then(imgs=>{
+    window.__cardData=imgs;
+    $("cardprev").innerHTML=imgs.map((im,i)=>`<div class="thumb"><span class="idx">${i+1}</span><img src="${im.data}"></div>`).join("");
+  });
+};
+function readFiles(files){
+  return Promise.all(files.map(f=>new Promise(res=>{
+    const r=new FileReader();
+    r.onload=()=>res({mime:f.type||"image/jpeg",data:r.result});
+    r.readAsDataURL(f);
+  })));
+}
 
 function resultHTML(r, opts){
   opts=opts||{};
   const s=r._source||{};
+  const isCards=r._type==="cards"||Array.isArray(r.cards);
   const hooks=(r.hooks||[]).map(h=>`<div class="hook"><div class="t">${esc(h.type)}</div><div class="x">${esc(h.text)}</div></div>`).join("");
   const script=(r.script||[]).map(x=>`<div class="seg"><div class="tm">${esc(x.time)}</div><div><span class="rl">${esc(x.role)}</span>${esc(x.text)}</div></div>`).join("");
   const scriptPlain=(r.script||[]).map(x=>`[${x.time}] ${x.role}\n${x.text}`).join("\n\n");
+  const cardsPlain=(r.cards||[]).map(c=>`[CARD ${c.n} · ${c.role}]\n${c.headline}\n${c.body}`).join("\n\n");
+  const cardsHTML=(r.cards||[]).map(c=>`<div class="cardslide"><div class="cn">CARD ${esc(String(c.n))} · ${esc(c.role)}</div><div class="chd">${esc(c.headline)}</div><div class="cbd">${esc(c.body)}</div></div>`).join("");
+  const bodyBlock=isCards
+    ? `<div class="block"><h3>🖼️ 카드별 (1·2·3…) ${copyBtn(cardsPlain,"카드 전체 복사")}</h3>${cardsHTML}</div>`
+    : `<div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>`;
+  const ocrRows=(r.slides_ocr||[]).map(o=>`<div class="k">슬라이드 ${esc(String(o.n))}</div><div class="raw">${esc((o.headline||"")+"\n"+(o.body||""))}</div>`).join("");
+  const srcInner=isCards
+    ? `${ocrRows}<div class="k">전체 번역·요약</div><div>${esc(r.translated||"")}</div>`
+    : `<div class="k">원본 캡션</div><div class="raw">${esc(s.caption_raw||"(없음)")}</div>
+        <div class="k">원본 대사(전사)</div><div class="raw">${esc(s.script_raw||"(없음)")}</div>
+        <div class="k">캡션 번역</div><div>${esc(r.translated_caption||"")}</div>
+        <div class="k">대사 번역</div><div>${esc(r.translated_script||"")}</div>`;
   const tags=(r.hashtags||[]).map(esc).join("  ");
   const saveBox = opts.saved ? "" : `
     <div class="savebox">
@@ -187,14 +250,11 @@ function resultHTML(r, opts){
     ${saveBox}
     <details class="src"><summary>📥 원본 추출 · 번역 보기 (${esc(s.platform||"")} · ${esc(s.uploader||"")})</summary>
       <div class="pair">
-        <div class="k">원본 캡션</div><div class="raw">${esc(s.caption_raw||"(없음)")}</div>
-        <div class="k">원본 대사(전사)</div><div class="raw">${esc(s.script_raw||"(없음)")}</div>
-        <div class="k">캡션 번역</div><div>${esc(r.translated_caption||"")}</div>
-        <div class="k">대사 번역</div><div>${esc(r.translated_script||"")}</div>
+        ${srcInner}
       </div>
     </details>
     <div class="block"><h3>🎣 훅 3안</h3>${hooks}</div>
-    <div class="block"><h3>🎬 대본 ${copyBtn(scriptPlain,"대본 복사")}</h3>${script}</div>
+    ${bodyBlock}
     <div class="block"><h3>✍️ 캡션 ${copyBtn(r.caption||"","캡션 복사")}</h3><div class="cap">${esc(r.caption)}</div>
       <div class="tags">${tags} ${copyBtn(tags,"태그 복사")}</div></div>
     <div class="stratbox">
@@ -323,19 +383,33 @@ window.reset=reset;
 function bind(){
   $("f").addEventListener("submit",async(e)=>{
     e.preventDefault();
+    const mode=(document.querySelector('input[name=mode]:checked')||{}).value||"auto";
+    const srctype=(document.querySelector('input[name=srctype]:checked')||{}).value||"reel";
+    if(srctype==="cards"){
+      const imgs=window.__cardData||[];
+      const cardurl=($("cardurl").value||"").trim();
+      if(!imgs.length && !cardurl){$("err").textContent="URL을 넣거나 슬라이드 이미지를 올려주세요.";return;}
+      const payload={note:$("note2").value,mode};
+      if(imgs.length){payload.images=imgs;} else {payload.url=cardurl;}
+      runJob("/api/cards",payload,"cards",cardurl||null);
+      return;
+    }
     const url=$("url").value.trim();
     if(!/^https?:\/\//.test(url)){$("err").textContent="링크(URL)를 넣어주세요.";return;}
-    const payload={url,note:$("note").value,mode:(document.querySelector('input[name=mode]:checked')||{}).value||"auto"};
-    app.innerHTML=loadingHTML();
-    let i=0;const iv=setInterval(()=>{const m=$("lmsg");if(m)m.textContent=LMSGS[++i%LMSGS.length];},2600);
-    try{
-      const res=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-      const data=await res.json();clearInterval(iv);
-      if(!res.ok||data.error){reset();$("err").textContent=data.error||"실패했어요.";return;}
-      if(data.result._source) data.result._source.url=url;
-      renderResult(data.result);
-    }catch(err){clearInterval(iv);reset();$("err").textContent="서버 오류. 다시 시도해주세요.";}
+    runJob("/api/run",{url,note:$("note").value,mode},"reel",url);
   });
+}
+async function runJob(endpoint,payload,kind,url){
+  app.innerHTML=loadingHTML(kind);
+  const msgs=kind==="cards"?LMSGS_CARDS:LMSGS;
+  let i=0;const iv=setInterval(()=>{const m=$("lmsg");if(m)m.textContent=msgs[++i%msgs.length];},2600);
+  try{
+    const res=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const data=await res.json();clearInterval(iv);
+    if(!res.ok||data.error){reset();$("err").textContent=data.error||"실패했어요.";return;}
+    if(url&&data.result._source) data.result._source.url=url;
+    renderResult(data.result);
+  }catch(err){clearInterval(iv);reset();$("err").textContent="서버 오류. 다시 시도해주세요.";}
 }
 reset();
 </script>

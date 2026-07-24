@@ -3,3 +3,6 @@ output/
 **/__pycache__/
 web/.wrangler/
 *.log
+server/deploy_hook.txt
+server/ig_cookies.txt
+downloads/
