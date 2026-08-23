@@ -245,6 +245,7 @@ function resultHTML(r, opts){
     <div class="hero" style="padding-bottom:6px">
       <span class="badge">${esc(r.mode||"김대영")} 모드</span>
       ${opts.saved?`<span class="badge" style="margin-left:6px">📚 ${esc(opts.saved)}</span>`:""}
+      ${r._notion_url?`<a class="badge" style="margin-left:6px;text-decoration:none" href="${esc(r._notion_url)}" target="_blank">📅 발행 캘린더 저장됨</a>`:""}
       <p class="gist">차용한 관통 메시지 · ${esc(r.source_gist||"")}</p>
     </div>
     ${saveBox}
