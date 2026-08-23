@@ -65,8 +65,10 @@ def _gemini_call(payload):
 
 # ─────────────────── 노션 「YLZ 콘텐츠 발행 캘린더」 자동 적재 ───────────────────
 NOTION_TOKEN_FILE = Path.home() / ".notion" / "token.txt"
-NOTION_TOKEN = NOTION_TOKEN_FILE.read_text(encoding="utf-8").strip() if NOTION_TOKEN_FILE.exists() else ""
-NOTION_DB = "164755620a4740459ffc1b806c46c981"  # YLZ 콘텐츠 발행 캘린더
+# 환경변수(NOTION_TOKEN) 우선 → 없으면 로컬 파일. 폰(Render 서버)에서도 캘린더 저장되게.
+NOTION_TOKEN = os.environ.get("NOTION_TOKEN") or (
+    NOTION_TOKEN_FILE.read_text(encoding="utf-8").strip() if NOTION_TOKEN_FILE.exists() else "")
+NOTION_DB = os.environ.get("NOTION_DB") or "164755620a4740459ffc1b806c46c981"  # YLZ 콘텐츠 발행 캘린더
 
 
 NOTION_HEADERS = {"Authorization": f"Bearer {NOTION_TOKEN}",
@@ -851,7 +853,7 @@ def cards():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "key": bool(GEMINI_KEY)})
+    return jsonify({"ok": True, "key": bool(GEMINI_KEY), "notion": bool(NOTION_TOKEN)})
 
 
 @app.get("/")

@@ -7,3 +7,5 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: NOTION_TOKEN
+        sync: false
