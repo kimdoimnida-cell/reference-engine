@@ -321,6 +321,7 @@ def notion_save(result, source_url):
             "주제": {"title": _nrt(title)},
             "상태": {"select": {"name": "작성중"}},
             "소스 메모": {"rich_text": _nrt(memo)},
+            "만든 경로": {"select": {"name": "레퍼런스 생성기"}},
         }
         if source_url:
             props["벤치마킹 소스"] = {"url": source_url}
