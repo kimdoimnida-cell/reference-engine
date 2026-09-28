@@ -291,12 +291,13 @@ def notion_save(result, source_url):
     원문 적재만 실패해도 재창작 페이지는 남긴다.
     """
     if not NOTION_TOKEN:
-        return "", "노션 토큰 없음"
+        return "", "노션 토큰 없음", ""
     try:
         src = result.get("_source", {})
         hooks = result.get("hooks") or [{}]
         gist = (result.get("source_gist") or hooks[0].get("text") or "레퍼런스 재창작")
         tag = auto_tag(result)
+        result["_tags"] = tag          # 결과 화면 버튼의 현재 선택 표시용
         title = (tag.get("title") or gist)[:90]
         memo = f"레퍼런스 생성기 자동 저장 · 모드 {result.get('mode', '')} · {src.get('platform', '')}"
         if tag.get("title"):
@@ -342,14 +343,14 @@ def notion_save(result, source_url):
         page_id, page_url = page.get("id", ""), page.get("url", "")
     except Exception:
         traceback.print_exc()
-        return "", "페이지 생성 실패"
+        return "", "페이지 생성 실패", ""
     # ② 나머지 + 원문 아카이브는 별도 append (여기서 깨져도 페이지는 유지)
     try:
         notion_append(page_id, blocks[90:] + _archive_toggles(result, source_url))
-        return page_url, ""
+        return page_url, "", page_id
     except Exception:
         traceback.print_exc()
-        return page_url, "원문 아카이브 적재 실패"
+        return page_url, "원문 아카이브 적재 실패", page_id
 
 app = Flask(__name__)
 
@@ -770,10 +771,11 @@ def run():
             }
             saved_dir = local_save(result, url)
             steps.append(f"로컬 원문 보관: {saved_dir}" if saved_dir else "로컬 원문 보관 실패")
-            notion_url, warn = notion_save(result, url)
+            notion_url, warn, notion_id = notion_save(result, url)
             steps.append(f"노션 적재 완료{' — ' + warn if warn else ' (원문 아카이브 포함)'}"
                          if notion_url else f"노션 적재 실패({warn})")
             result["_notion_url"] = notion_url
+            result["_notion_id"] = notion_id
             result["_local_dir"] = saved_dir
             return jsonify({"result": result})
     except Exception as e:
@@ -841,15 +843,52 @@ def cards():
         }
         local_dir = local_save(result, url)
         steps.append(f"로컬 원문 보관: {local_dir}" if local_dir else "로컬 원문 보관 실패")
-        notion_url, warn = notion_save(result, url)
+        notion_url, warn, notion_id = notion_save(result, url)
         steps.append(f"노션 적재 완료{' — ' + warn if warn else ' (원문 아카이브 포함)'}"
                      if notion_url else f"노션 적재 실패({warn})")
         result["_notion_url"] = notion_url
+        result["_notion_id"] = notion_id
         result["_local_dir"] = local_dir
         return jsonify({"result": result})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"카드뉴스 처리 오류: {e}"}), 500
+
+
+@app.post("/api/retag")
+def retag():
+    """결과 화면 버튼으로 노션 행의 판매 라인·카테고리·퍼널을 고쳐 쓴다.
+
+    AI 자동 분류는 추측이라 틀릴 때가 있다. 사람이 한 번 누르면 그 값이 정답.
+    """
+    if not NOTION_TOKEN:
+        return jsonify({"error": "노션 토큰 없음"}), 400
+    body = request.get_json(force=True, silent=True) or {}
+    page_id = (body.get("page_id") or "").strip()
+    if not page_id:
+        return jsonify({"error": "page_id 없음"}), 400
+    fields = {"sales_line": ("판매 라인", SALES_LINES),
+              "category": ("카테고리", CATEGORIES),
+              "funnel": ("퍼널 단계", FUNNELS)}
+    props = {}
+    for key, (prop, allowed) in fields.items():
+        val = body.get(key)
+        if val:
+            if val not in allowed:
+                return jsonify({"error": f"{prop} 값이 목록에 없음: {val}"}), 400
+            props[prop] = {"select": {"name": val}}
+    if not props:
+        return jsonify({"error": "바꿀 값 없음"}), 400
+    try:
+        req = Request(f"https://api.notion.com/v1/pages/{page_id}",
+                      data=json.dumps({"properties": props}).encode("utf-8"),
+                      headers=NOTION_HEADERS, method="PATCH")
+        with urlopen(req, timeout=30) as r:
+            r.read()
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"노션 수정 실패: {e}"}), 500
+    return jsonify({"ok": True, "updated": list(props.keys())})
 
 
 @app.get("/health")
